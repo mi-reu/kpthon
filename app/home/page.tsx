@@ -39,7 +39,7 @@ export default function Home() {
         loading={listening}
         onClick={() => {
           if (!isLoading) {
-            SpeechRecognition.startListening();
+            SpeechRecognition.startListening({ language: "ko" });
           } else {
             SpeechRecognition.stopListening();
           }
