@@ -1,11 +1,23 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import SpeechRecognition, {
+  useSpeechRecognition,
+} from "react-speech-recognition";
 import VoiceChatModeButton from "./_components/VoiceChatModeButton";
 import UserMessage from "./_components/UserMessage";
 import AiMessage from "./_components/AiMessage";
 
 export default function Home() {
+  const { transcript, listening, browserSupportsSpeechRecognition } =
+    useSpeechRecognition();
+
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!browserSupportsSpeechRecognition) {
+      alert("브라우저가 음성 인식을 지원하지 않습니다.");
+    }
+  }, [browserSupportsSpeechRecognition]);
 
   return (
     <div className="relative min-h-screen flex flex-col">
@@ -14,14 +26,26 @@ export default function Home() {
           {/* AI 메시지 */}
           <AiMessage message="안녕하세요! 대출 상담을 도와드리겠습니다. 어떤 도움이 필요하신가요?" />
 
-          {/* 사용자 메시지 */}
-          <UserMessage message="대출 상담을 받고 싶어요" />
+          {transcript.length > 0 && (
+            <>
+              {/* 사용자 메시지 */}
+              <UserMessage message={transcript} />
+            </>
+          )}
         </div>
       </div>
       <VoiceChatModeButton
         className="fixed bottom-8 left-1/2 -translate-x-1/2"
-        loading={isLoading}
-        onClick={() => setIsLoading(!isLoading)}
+        loading={listening}
+        onClick={() => {
+          if (!isLoading) {
+            SpeechRecognition.startListening();
+          } else {
+            SpeechRecognition.stopListening();
+          }
+
+          setIsLoading(!isLoading);
+        }}
       />
     </div>
   );
