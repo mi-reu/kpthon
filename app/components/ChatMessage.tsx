@@ -7,10 +7,12 @@ interface ChatMessageProps {
 }
 
 const ChatMessage = ({ isUser = false, children }: ChatMessageProps) => {
-  const [show, setShow] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    setShow(true);
+    setTimeout(() => {
+      setVisible(true);
+    }, 250);
   }, []);
 
   return (
@@ -18,12 +20,16 @@ const ChatMessage = ({ isUser = false, children }: ChatMessageProps) => {
       className={`flex ${
         isUser ? "justify-end" : "justify-start"
       } mb-4 transition-opacity duration-300 ${
-        show ? "opacity-100" : "opacity-0"
+        visible ? "opacity-100" : "opacity-0"
       }`}
     >
       <div
         className={`flex items-start gap-2 transition-transform duration-300 ${
-          show ? "translate-x-0" : isUser ? "translate-x-4" : "-translate-x-4"
+          visible
+            ? "translate-x-0"
+            : isUser
+            ? "translate-x-4"
+            : "-translate-x-4"
         }`}
       >
         {!isUser && (
