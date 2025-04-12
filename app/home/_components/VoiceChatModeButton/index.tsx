@@ -23,8 +23,8 @@ function VoiceChatModeButton({
       <Image
         src={loading ? "/voice-loading.svg" : "/voice-chat.svg"}
         alt="음성 모드 사용"
-        width={100}
-        height={100}
+        width={60}
+        height={60}
         priority
         onClick={onClick}
       />
