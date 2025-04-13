@@ -42,7 +42,7 @@ export default function Home() {
           기술입니다...
         </ChatMessage>
         {messages.map((message, index) => (
-          <ChatMessage key={index} isUser={message.isUser}>
+          <ChatMessage key={index} isUser={message.isUser} isNewMessage>
             {message.text}
           </ChatMessage>
         ))}

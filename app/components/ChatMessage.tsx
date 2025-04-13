@@ -4,16 +4,47 @@ import Image from "next/image";
 interface ChatMessageProps {
   isUser?: boolean;
   children: ReactNode;
+  // messageId?: string;
+  isNewMessage?: boolean;
 }
 
-const ChatMessage = ({ isUser = false, children }: ChatMessageProps) => {
+const ChatMessage = ({
+  isUser = false,
+  children,
+  // messageId,
+  isNewMessage = false,
+}: ChatMessageProps) => {
   const [visible, setVisible] = useState(false);
+  const [displayedText, setDisplayedText] = useState("");
+  const [isTypingComplete, setIsTypingComplete] = useState(false);
 
   useEffect(() => {
     setTimeout(() => {
       setVisible(true);
     }, 250);
   }, []);
+
+  useEffect(() => {
+    if (isUser || !isNewMessage) {
+      setDisplayedText(children as string);
+      setIsTypingComplete(true);
+      return;
+    }
+
+    const text = children as string;
+    let currentIndex = 0;
+    const typingInterval = setInterval(() => {
+      if (currentIndex < text.length) {
+        setDisplayedText(text.slice(0, currentIndex + 1));
+        currentIndex++;
+      } else {
+        clearInterval(typingInterval);
+        setIsTypingComplete(true);
+      }
+    }, 100); // 타이핑 속도 조절 (ms)
+
+    return () => clearInterval(typingInterval);
+  }, [children, isUser, isNewMessage]);
 
   return (
     <div
@@ -49,7 +80,8 @@ const ChatMessage = ({ isUser = false, children }: ChatMessageProps) => {
             isUser ? "bg-[#374151] text-white" : "bg-white text-gray-900"
           }`}
         >
-          {children}
+          {displayedText}
+          {!isTypingComplete && <span className="animate-pulse">|</span>}
         </div>
         {isUser && (
           <div className="w-8 h-8 rounded-full overflow-hidden relative">
