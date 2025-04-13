@@ -1,62 +1,119 @@
-import { useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
+import { useRef, useState, useCallback, useEffect } from "react";
+import useWebSocket from "../useWebSocket";
 
 interface Props {
-  url?: string;
+  onMessage?: (data: { audio: string; isLast: boolean }) => void;
 }
 
-function useVoiceRecorder({ url }: Props) {
+function useVoiceRecorder({ onMessage }: Props) {
   const [isRecording, setIsRecording] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const { sendAudioData, isConnected } = useWebSocket({
+    onMessage,
+  });
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
+  // 최신 상태를 추적하기 위한 ref
+  const recordingStateRef = useRef({ isRecording, isConnected });
+
+  // 상태가 변경될 때마다 ref 업데이트
   useEffect(() => {
-    if (!url) return;
-
-    // 웹소켓 연결 설정
-    const newSocket = io(url); // 서버 주소는 실제 서버 주소로 변경 필요
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [url]);
+    recordingStateRef.current = { isRecording, isConnected };
+  }, [isRecording, isConnected]);
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      streamRef.current = stream;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-          // 웹소켓으로 오디오 데이터 전송
-          socket?.emit("audioData", event.data);
+      const audioContext = new AudioContext({
+        sampleRate: 16000,
+      });
+      audioContextRef.current = audioContext;
+
+      // AudioWorklet 등록
+      await audioContext.audioWorklet.addModule("/audio-processor.js");
+
+      const sourceNode = audioContext.createMediaStreamSource(stream);
+      sourceNodeRef.current = sourceNode;
+
+      const workletNode = new AudioWorkletNode(
+        audioContext,
+        "audio-processor",
+        {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          processorOptions: {
+            bufferSize: 2048,
+          },
+        }
+      );
+      workletNodeRef.current = workletNode;
+
+      workletNode.port.onmessage = (event) => {
+        // ref를 통해 최신 상태 확인
+        if (
+          !recordingStateRef.current.isRecording ||
+          !recordingStateRef.current.isConnected
+        )
+          return;
+
+        const audioData = event.data as Int16Array;
+        const hasAudio = audioData.some(
+          (sample: number) => Math.abs(sample) > 100
+        );
+
+        if (hasAudio) {
+          sendAudioData(audioData);
         }
       };
 
-      mediaRecorder.start(100); // 100ms마다 데이터를 수집
+      sourceNode.connect(workletNode);
+      workletNode.connect(audioContext.destination);
+
       setIsRecording(true);
     } catch (error) {
       console.error("Error accessing microphone:", error);
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
+  const stopRecording = useCallback(() => {
+    if (isRecording) {
       setIsRecording(false);
+
+      if (workletNodeRef.current && sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+        workletNodeRef.current.disconnect();
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+
+      sourceNodeRef.current = null;
+      workletNodeRef.current = null;
+      streamRef.current = null;
+      audioContextRef.current = null;
     }
-  };
+  }, [isRecording]);
 
   return {
     isRecording,
+    isConnected,
     startRecording,
     stopRecording,
   };

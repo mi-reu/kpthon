@@ -41,7 +41,7 @@ const ChatMessage = ({
         clearInterval(typingInterval);
         setIsTypingComplete(true);
       }
-    }, 100); // 타이핑 속도 조절 (ms)
+    }, 50); // 타이핑 속도 조절 (ms)
 
     return () => clearInterval(typingInterval);
   }, [children, isUser, isNewMessage]);
@@ -66,8 +66,8 @@ const ChatMessage = ({
         {!isUser && (
           <div className="w-8 h-8 rounded-full overflow-hidden relative">
             <Image
-              src="/ai-jordy.png"
-              alt="AI"
+              src="/ai-avatar.png"
+              alt="AI Avatar"
               fill
               sizes="32px"
               className="object-contain"
