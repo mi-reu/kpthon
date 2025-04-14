@@ -1,22 +1,14 @@
-import { ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 interface ChatMessageProps {
   isUser?: boolean;
-  children: ReactNode;
-  // messageId?: string;
-  isNewMessage?: boolean;
+  text: string;
 }
 
-const ChatMessage = ({
-  isUser = false,
-  children,
-  // messageId,
-  isNewMessage = false,
-}: ChatMessageProps) => {
+const ChatMessage = ({ isUser = false, text }: ChatMessageProps) => {
   const [visible, setVisible] = useState(false);
-  const [displayedText, setDisplayedText] = useState("");
-  const [isTypingComplete, setIsTypingComplete] = useState(false);
+  const [displayedText, setDisplayedText] = useState<string>("");
 
   useEffect(() => {
     setTimeout(() => {
@@ -25,26 +17,32 @@ const ChatMessage = ({
   }, []);
 
   useEffect(() => {
-    if (isUser || !isNewMessage) {
-      setDisplayedText(children as string);
-      setIsTypingComplete(true);
-      return;
-    }
-
-    const text = children as string;
     let currentIndex = 0;
+    let result = "";
+
     const typingInterval = setInterval(() => {
       if (currentIndex < text.length) {
-        setDisplayedText(text.slice(0, currentIndex + 1));
-        currentIndex++;
+        if (text[currentIndex] === "<") {
+          const tagEndIndex = text.indexOf(">", currentIndex);
+          if (tagEndIndex !== -1) {
+            result += text.slice(currentIndex, tagEndIndex + 1);
+            currentIndex = tagEndIndex + 1;
+          } else {
+            result += text[currentIndex];
+            currentIndex++;
+          }
+        } else {
+          result += text[currentIndex];
+          currentIndex++;
+        }
+        setDisplayedText(result);
       } else {
         clearInterval(typingInterval);
-        setIsTypingComplete(true);
       }
-    }, 50); // 타이핑 속도 조절 (ms)
+    }, 50);
 
     return () => clearInterval(typingInterval);
-  }, [children, isUser, isNewMessage]);
+  }, [text]);
 
   return (
     <div
@@ -80,8 +78,7 @@ const ChatMessage = ({
             isUser ? "bg-[#374151] text-white" : "bg-white text-gray-900"
           }`}
         >
-          {displayedText}
-          {!isTypingComplete && <span className="animate-pulse">|</span>}
+          <div dangerouslySetInnerHTML={{ __html: displayedText }} />
         </div>
         {isUser && (
           <div className="w-8 h-8 rounded-full overflow-hidden relative">

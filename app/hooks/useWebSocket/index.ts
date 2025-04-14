@@ -1,24 +1,34 @@
+import { MessageData } from "@/app/stores/chat";
 import { useEffect, useState, useCallback, useRef } from "react";
 
+let globalSocket: WebSocket | null = null;
+let messageHandlers: ((data: MessageData) => void)[] = [];
+
 interface Props {
-  onMessage?: (message: { audio: string; isLast: boolean }) => void;
+  onMessage?: (message: MessageData) => void;
 }
 
 function useWebSocket({ onMessage }: Props) {
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
   const onMessageRef = useRef<Props["onMessage"]>(onMessage);
 
-  // onMessage 참조를 최신으로 유지
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
 
   useEffect(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (globalSocket) {
+      setIsConnected(globalSocket.readyState === WebSocket.OPEN);
+      if (onMessage) {
+        messageHandlers.push(onMessage);
+      }
+      return;
+    }
 
-    const ws = new WebSocket("ws://3.83.110.83:8080/ws/chat");
-    wsRef.current = ws;
+    // const ws = new WebSocket("ws://3.83.110.83:8080/ws/v2/chat");
+    // 제이코 로컬
+    const ws = new WebSocket("ws://192.168.33.29:8080/ws/v2/chat");
+    globalSocket = ws;
 
     ws.onopen = () => {
       setIsConnected(true);
@@ -26,12 +36,13 @@ function useWebSocket({ onMessage }: Props) {
 
     ws.onclose = () => {
       setIsConnected(false);
+      globalSocket = null;
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        onMessageRef.current?.(data);
+        messageHandlers.forEach((handler) => handler(data));
       } catch (error) {
         console.error("Error parsing WebSocket message:", error);
       }
@@ -41,30 +52,39 @@ function useWebSocket({ onMessage }: Props) {
       console.error("WebSocket error:", error);
     };
 
+    if (onMessage) {
+      messageHandlers.push(onMessage);
+    }
+
     return () => {
-      // 컴포넌트가 언마운트될 때만 연결을 닫음
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
+      if (onMessage) {
+        messageHandlers = messageHandlers.filter(
+          (handler) => handler !== onMessage
+        );
+      }
+      if (messageHandlers.length === 0 && globalSocket) {
+        globalSocket.close();
+        globalSocket = null;
       }
     };
-  }, []);
+  }, [onMessage]);
 
   const sendAudioData = useCallback((audioData: Int16Array) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(audioData.buffer);
+    if (globalSocket?.readyState === WebSocket.OPEN) {
+      globalSocket.send(audioData.buffer);
     }
   }, []);
 
   const sendMessage = useCallback((message: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(message);
+    if (globalSocket?.readyState === WebSocket.OPEN) {
+      globalSocket.send(message);
     }
   }, []);
 
   return {
     isConnected,
-    sendMessage,
     sendAudioData,
+    sendMessage,
   };
 }
 

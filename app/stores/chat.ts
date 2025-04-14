@@ -1,16 +1,23 @@
 import { atom } from "jotai";
 
-export type MessageType = "user" | "ai";
-
-export interface ChatMessage {
-  type: MessageType;
-  content: string;
-  timestamp: number;
+export enum MessageType {
+  USER_VOICE = "USER_VOICE",
+  USER_TEXT = "USER_TEXT",
+  AGENT_VOICE = "AGENT_VOICE",
+  AGENT_TEXT = "AGENT_TEXT",
 }
 
-export const chatListAtom = atom<ChatMessage[]>([]);
+export interface MessageData {
+  type: MessageType;
+  text?: string;
+  audio?: Int16Array;
+}
 
-export const addMessageAtom = atom(null, (get, set, message: ChatMessage) => {
-  const currentList = get(chatListAtom);
-  set(chatListAtom, [...currentList, message]);
-});
+export const chatListAtom = atom<MessageData[]>([]);
+
+export const updateChatListAtom = atom(
+  null,
+  (get, set, newMessages: MessageData[]) => {
+    set(chatListAtom, newMessages);
+  }
+);

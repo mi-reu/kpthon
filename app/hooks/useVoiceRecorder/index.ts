@@ -1,11 +1,18 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import { MessageData } from "@/app/stores/chat";
 import useWebSocket from "../useWebSocket";
 
 interface Props {
-  onMessage?: (data: { audio: string; isLast: boolean }) => void;
+  onMessage?: (data: MessageData) => void;
+  isInterrupted?: boolean;
+  minDecibels?: number;
 }
 
-function useVoiceRecorder({ onMessage }: Props) {
+function useVoiceRecorder({
+  onMessage,
+  isInterrupted,
+  minDecibels = -50,
+}: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const { sendAudioData, isConnected } = useWebSocket({
     onMessage,
@@ -22,6 +29,13 @@ function useVoiceRecorder({ onMessage }: Props) {
   useEffect(() => {
     recordingStateRef.current = { isRecording, isConnected };
   }, [isRecording, isConnected]);
+
+  // 인터럽트 상태가 변경되면 녹음 중지
+  useEffect(() => {
+    if (isInterrupted && isRecording) {
+      setIsRecording(false);
+    }
+  }, [isInterrupted, isRecording]);
 
   const startRecording = async () => {
     try {
@@ -55,6 +69,7 @@ function useVoiceRecorder({ onMessage }: Props) {
           numberOfOutputs: 1,
           processorOptions: {
             bufferSize: 2048,
+            minDecibels,
           },
         }
       );
@@ -88,28 +103,32 @@ function useVoiceRecorder({ onMessage }: Props) {
   };
 
   const stopRecording = useCallback(() => {
-    if (isRecording) {
-      setIsRecording(false);
+    setIsRecording(false);
 
-      if (workletNodeRef.current && sourceNodeRef.current) {
-        sourceNodeRef.current.disconnect();
-        workletNodeRef.current.disconnect();
-      }
-
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-
-      sourceNodeRef.current = null;
-      workletNodeRef.current = null;
-      streamRef.current = null;
-      audioContextRef.current = null;
+    if (workletNodeRef.current && sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      workletNodeRef.current.disconnect();
     }
-  }, [isRecording]);
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+
+    sourceNodeRef.current = null;
+    workletNodeRef.current = null;
+    streamRef.current = null;
+    audioContextRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (isInterrupted && isRecording) {
+      stopRecording();
+    }
+  }, [isInterrupted, isRecording, stopRecording]);
 
   return {
     isRecording,
