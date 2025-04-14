@@ -1,26 +1,30 @@
-import { MessageData } from "@/app/stores/chat";
 import { useEffect, useState, useCallback, useRef } from "react";
-
-let globalSocket: WebSocket | null = null;
-let messageHandlers: ((data: MessageData) => void)[] = [];
+import { MessageData } from "@/app/stores/chat";
 
 interface Props {
-  onMessage?: (message: MessageData) => void;
+  onMessage?: (data: MessageData) => void;
 }
 
 function useWebSocket({ onMessage }: Props = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const onMessageRef = useRef<Props["onMessage"]>(onMessage);
+  const socketRef = useRef<WebSocket | null>(null);
+  const messageHandlersRef = useRef<((data: MessageData) => void)[]>([]);
+
+  // onMessage 핸들러 메모이제이션
+  const memoizedOnMessage = useCallback((data: MessageData) => {
+    onMessageRef.current?.(data);
+  }, []);
 
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
 
   useEffect(() => {
-    if (globalSocket) {
-      setIsConnected(globalSocket.readyState === WebSocket.OPEN);
-      if (onMessage) {
-        messageHandlers.push(onMessage);
+    if (socketRef.current) {
+      setIsConnected(socketRef.current.readyState === WebSocket.OPEN);
+      if (memoizedOnMessage) {
+        messageHandlersRef.current.push(memoizedOnMessage);
       }
       return;
     }
@@ -30,7 +34,7 @@ function useWebSocket({ onMessage }: Props = {}) {
     // const ws = new WebSocket("ws://192.168.33.29:8000/ws/voice");
     // 그랙 로컬
     // const ws = new WebSocket("ws://192.168.32.223:8080/ws/v2/chat");
-    globalSocket = ws;
+    socketRef.current = ws;
 
     ws.onopen = () => {
       setIsConnected(true);
@@ -38,13 +42,13 @@ function useWebSocket({ onMessage }: Props = {}) {
 
     ws.onclose = () => {
       setIsConnected(false);
-      globalSocket = null;
+      socketRef.current = null;
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        messageHandlers.forEach((handler) => handler(data));
+        messageHandlersRef.current.forEach((handler) => handler(data));
       } catch (error) {
         console.error("Error parsing WebSocket message:", error);
       }
@@ -54,39 +58,33 @@ function useWebSocket({ onMessage }: Props = {}) {
       console.error("WebSocket error:", error);
     };
 
-    if (onMessage) {
-      messageHandlers.push(onMessage);
+    if (memoizedOnMessage) {
+      messageHandlersRef.current.push(memoizedOnMessage);
     }
 
     return () => {
-      if (onMessage) {
-        messageHandlers = messageHandlers.filter(
-          (handler) => handler !== onMessage
+      if (memoizedOnMessage) {
+        messageHandlersRef.current = messageHandlersRef.current.filter(
+          (handler) => handler !== memoizedOnMessage
         );
       }
-      if (messageHandlers.length === 0 && globalSocket) {
-        globalSocket.close();
-        globalSocket = null;
+      if (messageHandlersRef.current.length === 0 && socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
       }
     };
-  }, [onMessage]);
+  }, [memoizedOnMessage]);
 
-  const sendAudioData = useCallback((audioData: Int16Array) => {
-    if (globalSocket?.readyState === WebSocket.OPEN) {
-      globalSocket.send(audioData.buffer);
-    }
-  }, []);
-
-  const sendMessage = useCallback((message: string) => {
-    if (globalSocket?.readyState === WebSocket.OPEN) {
-      globalSocket.send(message);
+  const sendMessage = useCallback((message: Int16Array) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(message.buffer);
     }
   }, []);
 
   return {
     isConnected,
-    sendAudioData,
     sendMessage,
+    socketRef,
   };
 }
 

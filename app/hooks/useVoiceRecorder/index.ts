@@ -1,16 +1,13 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import useWebSocket from "../useWebSocket";
-import { MessageData } from "@/app/stores/chat";
 
 interface Props {
-  onMessage?: (message: MessageData) => void;
+  sendMessage: (audioData: Int16Array) => void;
+  isConnected: boolean;
+  isPlaying: boolean;
 }
 
-function useVoiceRecorder({ onMessage }: Props) {
+function useVoiceRecorder({ sendMessage, isConnected, isPlaying }: Props) {
   const [isRecording, setIsRecording] = useState(false);
-  const { sendAudioData, isConnected } = useWebSocket({
-    onMessage,
-  });
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -18,12 +15,12 @@ function useVoiceRecorder({ onMessage }: Props) {
   const isPausedRef = useRef(false);
 
   // 최신 상태를 추적하기 위한 ref
-  const recordingStateRef = useRef({ isRecording, isConnected });
+  const recordingStateRef = useRef({ isRecording, isConnected, isPlaying });
 
   // 상태가 변경될 때마다 ref 업데이트
   useEffect(() => {
-    recordingStateRef.current = { isRecording, isConnected };
-  }, [isRecording, isConnected]);
+    recordingStateRef.current = { isRecording, isConnected, isPlaying };
+  }, [isRecording, isConnected, isPlaying]);
 
   const pauseRecording = useCallback(() => {
     isPausedRef.current = true;
@@ -51,7 +48,6 @@ function useVoiceRecorder({ onMessage }: Props) {
       });
       audioContextRef.current = audioContext;
 
-      // AudioWorklet 등록
       await audioContext.audioWorklet.addModule("/audio-processor.js");
 
       const sourceNode = audioContext.createMediaStreamSource(stream);
@@ -63,19 +59,18 @@ function useVoiceRecorder({ onMessage }: Props) {
         {
           numberOfInputs: 1,
           numberOfOutputs: 1,
-          processorOptions: {
-            bufferSize: 10240,
-          },
         }
       );
       workletNodeRef.current = workletNode;
 
+      let lastReceived = Date.now();
+
       workletNode.port.onmessage = (event) => {
-        // ref를 통해 최신 상태 확인
         if (
           !recordingStateRef.current.isRecording ||
           !recordingStateRef.current.isConnected ||
-          isPausedRef.current
+          isPausedRef.current ||
+          recordingStateRef.current.isPlaying
         )
           return;
 
@@ -85,16 +80,25 @@ function useVoiceRecorder({ onMessage }: Props) {
         );
 
         if (hasAudio) {
-          // 250ms = 4000 샘플 (16kHz 샘플링 레이트 기준)
+          lastReceived = Date.now();
           const CHUNK_SIZE = 4000;
-
-          // 오디오 데이터를 청크 단위로 나누어 전송
           for (let i = 0; i < audioData.length; i += CHUNK_SIZE) {
             const chunk = audioData.slice(i, i + CHUNK_SIZE);
-            sendAudioData(chunk);
+            sendMessage(chunk);
           }
         }
       };
+
+      // 무음 감지 및 덤프 전송용 루프
+      setInterval(() => {
+        const now = Date.now();
+        const silenceTimeout = 300; // ms
+        if (now - lastReceived > silenceTimeout) {
+          const silence = new Int16Array(2048); // 무음 덤프
+          sendMessage(silence);
+          lastReceived = now; // 중복 방지
+        }
+      }, 100);
 
       sourceNode.connect(workletNode);
       workletNode.connect(audioContext.destination);
@@ -131,7 +135,6 @@ function useVoiceRecorder({ onMessage }: Props) {
 
   return {
     isRecording,
-    isConnected,
     startRecording,
     stopRecording,
     pauseRecording,

@@ -6,7 +6,7 @@ import ChatContainer from "@/app/components/ChatContainer";
 import ChatMessage from "@/app/components/ChatMessage";
 import VoiceChatButton from "@/app/components/VoiceChatButton";
 import useVoiceRecorder from "@/app/hooks/useVoiceRecorder";
-import useVoiceTextSync from "@/app/hooks/useVoiceTextSync";
+import useWebSocket from "@/app/hooks/useWebSocket";
 import { useAtom } from "jotai";
 import {
   chatListAtom,
@@ -14,6 +14,8 @@ import {
   MessageType,
   updateChatListAtom,
 } from "@/app/stores/chat";
+import { playAudio, clearAudioQueue } from "@/app/utils/audio";
+import Image from "next/image";
 
 const helloAiMessage = `
   안녕하세요, 고객님! 카카오페이 대출 상담에 방문해주셔서 진심으로 감사합니다.
@@ -24,38 +26,47 @@ export default function Home() {
   const [chatList] = useAtom(chatListAtom);
   const [, updateChatList] = useAtom(updateChatListAtom);
   const [isStarted, setIsStarted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  const { isPlaying, stopAudio } = useVoiceTextSync({
-    onMessage: (data: MessageData) => {
+  const handleAudioPlayback = async (audio: Int16Array<ArrayBufferLike>) => {
+    try {
+      setIsPlaying(true);
+      await playAudio(audio);
+      setIsPlaying(false);
+      resumeRecording();
+    } catch (error) {
+      console.error("Error playing audio:", error);
+      setIsPlaying(false);
+      resumeRecording();
+    }
+  };
+
+  const { isConnected, sendMessage } = useWebSocket({
+    onMessage: async (data: MessageData) => {
       if (data.type === MessageType.AGENT_TEXT) {
         updateChatList([...chatList, data]);
+      } else if (data.type === MessageType.USER_TEXT) {
+        updateChatList([...chatList, data]);
+      } else if (data.audio) {
+        await handleAudioPlayback(data.audio);
       }
-    },
-    onResumeRecording: () => {
-      resumeRecording();
     },
   });
 
-  const {
-    isRecording,
-    startRecording,
-    stopRecording,
-    pauseRecording,
-    resumeRecording,
-  } = useVoiceRecorder({
-    onMessage: (data: MessageData) => {
-      if (data.type === MessageType.USER_TEXT) {
-        updateChatList([...chatList, data]);
-        // 사용자 텍스트가 전달되면 녹음 일시 중지
-        pauseRecording();
-      }
-    },
-  });
+  const { isRecording, startRecording, stopRecording, resumeRecording } =
+    useVoiceRecorder({
+      sendMessage,
+      isConnected,
+      isPlaying,
+    });
+
+  const stopAudio = () => {
+    setIsPlaying(false);
+    clearAudioQueue();
+  };
 
   const handleStartClick = () => {
     setIsStarted(true);
-    // 초기 인사 메시지 전송
-    // sendMessage(helloAiMessage);
     updateChatList([
       {
         type: MessageType.AGENT_TEXT,
@@ -70,7 +81,6 @@ export default function Home() {
     } else if (isRecording) {
       stopRecording();
     } else if (!isPlaying) {
-      // AI가 응답 중이 아닐 때만 녹음 시작
       startRecording();
     }
   };
@@ -80,7 +90,7 @@ export default function Home() {
       <div
         style={{
           backgroundImage: `url(/bg.png)`,
-          backgroundSize: "cover",
+          backgroundSize: "100% 100%",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
           minHeight: "100vh",
@@ -89,6 +99,18 @@ export default function Home() {
         }}
         className="flex flex-col items-center"
       >
+        <Image
+          src="/logo.png"
+          alt="logo"
+          width={300}
+          height={300}
+          style={{
+            position: "absolute",
+            top: "0",
+            left: "50%",
+            transform: "translate(-50%, 0)",
+          }}
+        />
         <div className="text-center absolute bottom-[10%]">
           <button
             onClick={handleStartClick}
