@@ -1,18 +1,12 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { MessageData } from "@/app/stores/chat";
 import useWebSocket from "../useWebSocket";
+import { MessageData } from "@/app/stores/chat";
 
 interface Props {
-  onMessage?: (data: MessageData) => void;
-  isInterrupted?: boolean;
-  minDecibels?: number;
+  onMessage?: (message: MessageData) => void;
 }
 
-function useVoiceRecorder({
-  onMessage,
-  isInterrupted,
-  minDecibels = -50,
-}: Props) {
+function useVoiceRecorder({ onMessage }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const { sendAudioData, isConnected } = useWebSocket({
     onMessage,
@@ -21,6 +15,7 @@ function useVoiceRecorder({
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isPausedRef = useRef(false);
 
   // 최신 상태를 추적하기 위한 ref
   const recordingStateRef = useRef({ isRecording, isConnected });
@@ -30,12 +25,13 @@ function useVoiceRecorder({
     recordingStateRef.current = { isRecording, isConnected };
   }, [isRecording, isConnected]);
 
-  // 인터럽트 상태가 변경되면 녹음 중지
-  useEffect(() => {
-    if (isInterrupted && isRecording) {
-      setIsRecording(false);
-    }
-  }, [isInterrupted, isRecording]);
+  const pauseRecording = useCallback(() => {
+    isPausedRef.current = true;
+  }, []);
+
+  const resumeRecording = useCallback(() => {
+    isPausedRef.current = false;
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -68,8 +64,7 @@ function useVoiceRecorder({
           numberOfInputs: 1,
           numberOfOutputs: 1,
           processorOptions: {
-            bufferSize: 2048,
-            minDecibels,
+            bufferSize: 10240,
           },
         }
       );
@@ -79,7 +74,8 @@ function useVoiceRecorder({
         // ref를 통해 최신 상태 확인
         if (
           !recordingStateRef.current.isRecording ||
-          !recordingStateRef.current.isConnected
+          !recordingStateRef.current.isConnected ||
+          isPausedRef.current
         )
           return;
 
@@ -89,7 +85,14 @@ function useVoiceRecorder({
         );
 
         if (hasAudio) {
-          sendAudioData(audioData);
+          // 250ms = 4000 샘플 (16kHz 샘플링 레이트 기준)
+          const CHUNK_SIZE = 4000;
+
+          // 오디오 데이터를 청크 단위로 나누어 전송
+          for (let i = 0; i < audioData.length; i += CHUNK_SIZE) {
+            const chunk = audioData.slice(i, i + CHUNK_SIZE);
+            sendAudioData(chunk);
+          }
         }
       };
 
@@ -103,38 +106,36 @@ function useVoiceRecorder({
   };
 
   const stopRecording = useCallback(() => {
-    setIsRecording(false);
+    if (isRecording) {
+      setIsRecording(false);
 
-    if (workletNodeRef.current && sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      workletNodeRef.current.disconnect();
+      if (workletNodeRef.current && sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+        workletNodeRef.current.disconnect();
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+
+      sourceNodeRef.current = null;
+      workletNodeRef.current = null;
+      streamRef.current = null;
+      audioContextRef.current = null;
     }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-
-    sourceNodeRef.current = null;
-    workletNodeRef.current = null;
-    streamRef.current = null;
-    audioContextRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    if (isInterrupted && isRecording) {
-      stopRecording();
-    }
-  }, [isInterrupted, isRecording, stopRecording]);
+  }, [isRecording]);
 
   return {
     isRecording,
     isConnected,
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
   };
 }
 

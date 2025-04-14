@@ -8,7 +8,7 @@ interface Props {
   onMessage?: (message: MessageData) => void;
 }
 
-function useWebSocket({ onMessage }: Props) {
+function useWebSocket({ onMessage }: Props = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const onMessageRef = useRef<Props["onMessage"]>(onMessage);
 
@@ -25,9 +25,11 @@ function useWebSocket({ onMessage }: Props) {
       return;
     }
 
-    // const ws = new WebSocket("ws://3.83.110.83:8080/ws/v2/chat");
+    const ws = new WebSocket("ws://54.91.104.162:8080/ws/v2/chat");
     // 제이코 로컬
-    const ws = new WebSocket("ws://192.168.33.29:8080/ws/v2/chat");
+    // const ws = new WebSocket("ws://192.168.33.29:8000/ws/voice");
+    // 그랙 로컬
+    // const ws = new WebSocket("ws://192.168.32.223:8080/ws/v2/chat");
     globalSocket = ws;
 
     ws.onopen = () => {

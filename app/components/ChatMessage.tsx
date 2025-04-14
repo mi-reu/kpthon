@@ -75,7 +75,7 @@ const ChatMessage = ({ isUser = false, text }: ChatMessageProps) => {
         )}
         <div
           className={`px-4 py-2 rounded-2xl max-w-[80%] ${
-            isUser ? "bg-[#374151] text-white" : "bg-white text-gray-900"
+            isUser ? "bg-[#FFFF00] text-black" : "bg-white text-gray-900"
           }`}
         >
           <div dangerouslySetInnerHTML={{ __html: displayedText }} />

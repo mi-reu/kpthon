@@ -5,16 +5,33 @@ export interface AudioBufferInfo {
   numberOfChannels: number;
 }
 
-export async function playAudio(audio: Int16Array): Promise<void> {
+// 오디오 큐와 관련된 전역 변수
+let audioQueue: Int16Array[] = [];
+let isPlaying = false;
+let audioContext: AudioContext | null = null;
+
+async function processAudioQueue() {
+  if (isPlaying || audioQueue.length === 0) return;
+
+  isPlaying = true;
+  const audio = audioQueue.shift();
+
+  if (!audio) {
+    isPlaying = false;
+    return;
+  }
+
   try {
     // byteArray 데이터를 Int16Array로 변환
     const byteArray = new Uint8Array(audio);
     const int16Array = new Int16Array(byteArray.buffer);
 
     // 오디오 컨텍스트 초기화
-    const audioContext = new AudioContext({
-      sampleRate: 16000,
-    });
+    if (!audioContext) {
+      audioContext = new AudioContext({
+        sampleRate: 16000,
+      });
+    }
 
     // Int16Array를 Float32Array로 변환
     const float32Array = new Float32Array(int16Array.length);
@@ -49,13 +66,30 @@ export async function playAudio(audio: Int16Array): Promise<void> {
       await audioContext.resume();
     }
 
-    source.start(0);
-
-    // 재생이 끝나면 정리
+    // 재생 완료 시 다음 오디오 처리
     source.onended = () => {
-      audioContext.close();
+      isPlaying = false;
+      processAudioQueue();
     };
+
+    source.start();
   } catch (error) {
     console.error("Error playing audio:", error);
+    isPlaying = false;
+    processAudioQueue();
+  }
+}
+
+export async function playAudio(audio: Int16Array): Promise<void> {
+  audioQueue.push(audio);
+  await processAudioQueue();
+}
+
+export function clearAudioQueue() {
+  audioQueue = [];
+  isPlaying = false;
+  if (audioContext) {
+    audioContext.close();
+    audioContext = null;
   }
 }
