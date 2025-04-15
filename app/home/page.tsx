@@ -28,27 +28,23 @@ export default function Home() {
   const [isStarted, setIsStarted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const handleAudioPlayback = async (audio: Int16Array<ArrayBufferLike>) => {
-    try {
-      setIsPlaying(true);
-      await playAudio(audio);
-      setIsPlaying(false);
-      resumeRecording();
-    } catch (error) {
-      console.error("Error playing audio:", error);
-      setIsPlaying(false);
-      resumeRecording();
-    }
-  };
-
   const { isConnected, sendMessage } = useWebSocket({
     onMessage: async (data: MessageData) => {
       if (data.type === MessageType.AGENT_TEXT) {
         updateChatList([...chatList, data]);
-      } else if (data.type === MessageType.USER_TEXT) {
+      } else if (data.type === MessageType.USER_TEXT && !isPlaying) {
         updateChatList([...chatList, data]);
       } else if (data.audio) {
-        await handleAudioPlayback(data.audio);
+        try {
+          setIsPlaying(true);
+          await playAudio(data.audio);
+          setIsPlaying(false);
+          resumeRecording();
+        } catch (error) {
+          console.error("Error playing audio:", error);
+          setIsPlaying(false);
+          resumeRecording();
+        }
       }
     },
   });

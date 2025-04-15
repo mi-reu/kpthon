@@ -31,7 +31,7 @@ function useWebSocket({ onMessage }: Props = {}) {
 
     const ws = new WebSocket("ws://54.91.104.162:8080/ws/v2/chat");
     // 제이코 로컬
-    // const ws = new WebSocket("ws://192.168.33.29:8000/ws/voice");
+    // const ws = new WebSocket("ws://192.168.33.29:8080/ws/v2/chat");
     // 그랙 로컬
     // const ws = new WebSocket("ws://192.168.32.223:8080/ws/v2/chat");
     socketRef.current = ws;

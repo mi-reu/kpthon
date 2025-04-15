@@ -7,19 +7,25 @@ class AudioProcessor extends AudioWorkletProcessor {
     this.bufferIndex = 0;
     this.silenceThreshold = opts.silenceThreshold || 0.01;
     this.gain = opts.gain || 1.5;
+    this.dbThreshold = opts.dbThreshold || -50; // 데시벨 임계값 (기본값 -50dB)
 
     // 무음 타이머 관련
     this.silenceTimeout = opts.silenceTimeout || 300; // ms
     this.lastActiveTime = currentTime * 1000; // 마이크 소리가 들어온 마지막 시간 (ms)
   }
 
-  isSilent(buffer) {
+  calculateDB(buffer) {
     let sum = 0;
     for (let i = 0; i < buffer.length; i++) {
       sum += buffer[i] * buffer[i];
     }
     const rms = Math.sqrt(sum / buffer.length);
-    return rms < this.silenceThreshold;
+    return 20 * Math.log10(rms);
+  }
+
+  isSilent(buffer) {
+    const db = this.calculateDB(buffer);
+    return db < this.dbThreshold;
   }
 
   sendBuffer(buffer) {

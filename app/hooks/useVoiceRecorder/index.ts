@@ -59,6 +59,9 @@ function useVoiceRecorder({ sendMessage, isConnected, isPlaying }: Props) {
         {
           numberOfInputs: 1,
           numberOfOutputs: 1,
+          processorOptions: {
+            dbThreshold: -30,
+          },
         }
       );
       workletNodeRef.current = workletNode;
