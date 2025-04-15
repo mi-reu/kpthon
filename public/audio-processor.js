@@ -68,10 +68,6 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     // 🧊 일정 시간 이상 음성 입력 없으면 무음 덤프 전송
     const now = currentTime * 1000;
-    console.log(
-      "now - this.lastActiveTime > this.silenceTimeout",
-      now - this.lastActiveTime > this.silenceTimeout
-    );
     if (now - this.lastActiveTime > this.silenceTimeout) {
       this.sendSilentChunk();
       this.lastActiveTime = now; // 중복 전송 방지
