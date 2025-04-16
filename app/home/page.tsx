@@ -32,7 +32,7 @@ export default function Home() {
     onMessage: async (data: MessageData) => {
       if (data.type === MessageType.AGENT_TEXT) {
         updateChatList([...chatList, data]);
-      } else if (data.type === MessageType.USER_TEXT && !isPlaying) {
+      } else if (data.type === MessageType.USER_TEXT) {
         updateChatList([...chatList, data]);
       } else if (data.audio) {
         try {
